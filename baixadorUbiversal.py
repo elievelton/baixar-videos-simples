@@ -45,6 +45,40 @@ def limpar_nome(nome):
 
 # ---------------------------------------------------------
 
+# ---------------------------------------------------------
+
+def escolher_nome_arquivo(info):
+
+    titulo = limpar_nome(
+        info.get("title", "video")
+    )
+
+    print()
+
+    print("Título do vídeo:")
+
+    print(titulo)
+
+    alterar = input(
+        "\nAlterar nome do arquivo? (s/N): "
+    ).lower()
+
+    if alterar != "s":
+
+        return titulo
+
+    while True:
+
+        novo = input(
+            "\nNovo nome: "
+        ).strip()
+
+        if novo:
+
+            return limpar_nome(novo)
+
+        print("O nome não pode ficar vazio.")
+
 
 def formatar_tempo(segundos):
 
@@ -240,9 +274,15 @@ def obter_formato(opcao):
 # ---------------------------------------------------------
 
 
-def baixar(url, info, opcao, pasta):
+def baixar(
+    url,
+    info,
+    opcao,
+    pasta,
+    nome_arquivo,
+):
 
-    titulo = limpar_nome(info.get("title", "video"))
+    titulo = nome_arquivo
 
     playlist = info.get("_type") == "playlist"
 
@@ -382,6 +422,7 @@ def main():
         return
 
     mostrar_info(info)
+    nome_arquivo = escolher_nome_arquivo(info)
 
     opcao = escolher_formato()
 
@@ -405,15 +446,17 @@ def main():
 
     baixar(
 
-        url,
+    url,
 
-        info,
+    info,
 
-        opcao,
+    opcao,
 
-        pasta,
+    pasta,
 
-    )
+    nome_arquivo,
+
+)
 
 
 # ---------------------------------------------------------
