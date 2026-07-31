@@ -58,16 +58,13 @@ class UniversalDownloader:
 
         titulo = info.get("title", "video")
 
-        if not nome.strip():
+        if not nome or not nome.strip():
 
             nome = titulo
 
         print(f"\nTítulo : {titulo}")
-
         print(f"Duração: {info.get('duration')} segundos")
-
         print(f"Uploader: {info.get('uploader')}")
-
         print()
 
         ydl_opts = {
@@ -80,6 +77,13 @@ class UniversalDownloader:
             "noplaylist": True,
 
             "merge_output_format": "mp4",
+
+            "prefer_ffmpeg": True,
+
+            "postprocessor_args": [
+                "-movflags",
+                "+faststart",
+            ],
 
             "progress_hooks": [self.progress_hook],
 
@@ -98,12 +102,6 @@ class UniversalDownloader:
             "no_warnings": False,
 
             "http_chunk_size": 10485760,
-
-            "format_sort": [
-                "res",
-                "fps",
-                "codec:h264"
-            ]
         }
 
         if apenas_audio:
@@ -114,13 +112,18 @@ class UniversalDownloader:
                 {
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": "mp3",
-                    "preferredquality": "192"
+                    "preferredquality": "192",
                 }
             ]
 
         else:
 
+            # Prioriza H.264 + AAC (QuickTime)
+            # Caso não exista, usa o melhor formato disponível.
+
             ydl_opts["format"] = (
+                "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/"
+                "b[vcodec^=avc1]/"
                 "bv*+ba/b"
             )
 
@@ -129,16 +132,13 @@ class UniversalDownloader:
             ydl.download([url])
 
         print("\nArquivo salvo em:")
-
         print(self.output)
 
 
 def menu():
 
     print("=" * 50)
-
     print("Universal Video Downloader")
-
     print("=" * 50)
 
     url = input("\nURL: ")
@@ -161,5 +161,4 @@ if __name__ == "__main__":
     except Exception as e:
 
         print("\nERRO:")
-
         print(e)
