@@ -1,164 +1,436 @@
 import os
+import re
 import shutil
+import time
+
 from yt_dlp import YoutubeDL
 
 
-class UniversalDownloader:
+OUTPUT_PADRAO = os.path.expanduser("~/Movies")
 
-    def __init__(self):
 
-        self.output = os.path.expanduser("~/Movies")
+# ---------------------------------------------------------
 
-        os.makedirs(self.output, exist_ok=True)
 
-        if shutil.which("ffmpeg") is None:
-            raise Exception(
-                "FFmpeg não encontrado.\n\nInstale com:\n\nbrew install ffmpeg"
+def banner():
+
+    print("=" * 60)
+    print(" Universal Video Downloader v1.1")
+    print("=" * 60)
+
+
+# ---------------------------------------------------------
+
+
+def verificar_ffmpeg():
+
+    if shutil.which("ffmpeg") is None:
+
+        raise Exception(
+            "\nFFmpeg não encontrado.\n\n"
+            "Instale com:\n\n"
+            "brew install ffmpeg\n"
+        )
+
+
+# ---------------------------------------------------------
+
+
+def limpar_nome(nome):
+
+    nome = re.sub(r'[\\/:*?"<>|]', "", nome)
+
+    return nome.strip()
+
+
+# ---------------------------------------------------------
+
+
+def formatar_tempo(segundos):
+
+    if not segundos:
+
+        return "--"
+
+    h = segundos // 3600
+
+    m = (segundos % 3600) // 60
+
+    s = segundos % 60
+
+    if h:
+
+        return f"{h:02}:{m:02}:{s:02}"
+
+    return f"{m:02}:{s:02}"
+
+
+# ---------------------------------------------------------
+
+
+def obter_info(url):
+
+    with YoutubeDL({"quiet": True}) as ydl:
+
+        return ydl.extract_info(url, download=False)
+
+
+# ---------------------------------------------------------
+
+
+def mostrar_info(info):
+
+    titulo = info.get("title", "-")
+
+    canal = info.get("uploader", "-")
+
+    duracao = formatar_tempo(info.get("duration"))
+
+    formatos = info.get("formats", [])
+
+    altura = 0
+
+    for f in formatos:
+
+        h = f.get("height")
+
+        if h:
+
+            altura = max(altura, h)
+
+    print("\n" + "-" * 60)
+
+    print(f"Título    : {titulo}")
+
+    print(f"Canal     : {canal}")
+
+    print(f"Duração   : {duracao}")
+
+    if altura:
+
+        print(f"Qualidade : {altura}p")
+
+    print("-" * 60)
+
+
+# ---------------------------------------------------------
+
+
+def escolher_formato():
+
+    print()
+
+    print("1 - Melhor qualidade")
+
+    print("2 - 1080p")
+
+    print("3 - 720p")
+
+    print("4 - Apenas áudio")
+
+    print("0 - Cancelar")
+
+    while True:
+
+        opcao = input("\nEscolha: ").strip()
+
+        if opcao in ("0", "1", "2", "3", "4"):
+
+            return opcao
+
+        print("Opção inválida.")
+
+
+# ---------------------------------------------------------
+
+
+def escolher_pasta():
+
+    print()
+
+    print("Salvar em:")
+
+    print()
+
+    print(OUTPUT_PADRAO)
+
+    alterar = input("\nAlterar pasta? (s/N): ").lower()
+
+    if alterar != "s":
+
+        os.makedirs(OUTPUT_PADRAO, exist_ok=True)
+
+        return OUTPUT_PADRAO
+
+    pasta = input("\nNova pasta: ").strip()
+
+    pasta = os.path.expanduser(pasta)
+
+    os.makedirs(pasta, exist_ok=True)
+
+    return pasta
+
+# ---------------------------------------------------------
+
+
+def progress_hook(d):
+
+    if d["status"] == "downloading":
+
+        total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+        downloaded = d.get("downloaded_bytes", 0)
+
+        if total:
+
+            percent = downloaded / total * 100
+
+            speed = d.get("speed")
+            eta = d.get("eta")
+
+            speed_str = (
+                f"{speed / 1024 / 1024:.2f} MB/s"
+                if speed else "?"
             )
 
-    def progress_hook(self, d):
+            eta_str = f"{eta}s" if eta else "--"
 
-        if d["status"] == "downloading":
+            print(
+                f"\r{percent:6.2f}% | {speed_str} | ETA {eta_str}",
+                end="",
+                flush=True,
+            )
 
-            total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+    elif d["status"] == "finished":
 
-            downloaded = d.get("downloaded_bytes", 0)
+        print("\n\nMesclando arquivos...")
 
-            if total:
 
-                percent = downloaded / total * 100
+# ---------------------------------------------------------
 
-                speed = d.get("speed")
 
-                eta = d.get("eta")
+def obter_formato(opcao):
 
-                if speed:
-                    speed = f"{speed/1024/1024:.2f} MB/s"
-                else:
-                    speed = "?"
+    formatos = {
 
-                print(
-                    f"\r{percent:6.2f}% | {speed} | ETA {eta}s",
-                    end=""
-                )
+        "1": (
+            "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/"
+            "b[vcodec^=avc1]/"
+            "bv*+ba/b"
+        ),
 
-        elif d["status"] == "finished":
+        "2": (
+            "bestvideo[height<=1080][vcodec^=avc1]+"
+            "bestaudio[acodec^=mp4a]/"
+            "best[height<=1080]"
+        ),
 
-            print("\nDownload concluído.")
+        "3": (
+            "bestvideo[height<=720][vcodec^=avc1]+"
+            "bestaudio[acodec^=mp4a]/"
+            "best[height<=720]"
+        ),
 
-    def download(self, url, nome=None, apenas_audio=False):
+        "4": "bestaudio"
 
-        info_opts = {
-            "quiet": True
-        }
+    }
 
-        with YoutubeDL(info_opts) as ydl:
+    return formatos[opcao]
 
-            info = ydl.extract_info(url, download=False)
 
-        titulo = info.get("title", "video")
+# ---------------------------------------------------------
 
-        if not nome or not nome.strip():
 
-            nome = titulo
+def baixar(url, info, opcao, pasta):
 
-        print(f"\nTítulo : {titulo}")
-        print(f"Duração: {info.get('duration')} segundos")
-        print(f"Uploader: {info.get('uploader')}")
+    titulo = limpar_nome(info.get("title", "video"))
+
+    playlist = info.get("_type") == "playlist"
+
+    noplaylist = True
+
+    if playlist:
+
         print()
 
-        ydl_opts = {
+        print("Playlist detectada.")
 
-            "outtmpl": os.path.join(
-                self.output,
-                f"{nome}.%(ext)s"
-            ),
+        escolha = input(
+            "Baixar playlist inteira? (s/N): "
+        ).lower()
 
-            "noplaylist": True,
+        noplaylist = escolha != "s"
 
-            "merge_output_format": "mp4",
+    ydl_opts = {
 
-            "prefer_ffmpeg": True,
+        "outtmpl": os.path.join(
+            pasta,
+            f"{titulo}.%(ext)s"
+        ),
 
-            "postprocessor_args": [
-                "-movflags",
-                "+faststart",
-            ],
+        "format": obter_formato(opcao),
 
-            "progress_hooks": [self.progress_hook],
+        "merge_output_format": "mp4",
 
-            "concurrent_fragment_downloads": 5,
+        "prefer_ffmpeg": True,
 
-            "retries": 10,
+        "postprocessor_args": [
+            "-movflags",
+            "+faststart",
+        ],
 
-            "fragment_retries": 10,
+        "progress_hooks": [
+            progress_hook
+        ],
 
-            "continuedl": True,
+        "concurrent_fragment_downloads": 5,
 
-            "ignoreerrors": False,
+        "continuedl": True,
 
-            "quiet": False,
+        "fragment_retries": 10,
 
-            "no_warnings": False,
+        "retries": 10,
 
-            "http_chunk_size": 10485760,
-        }
+        "ignoreerrors": False,
 
-        if apenas_audio:
+        "noplaylist": noplaylist,
 
-            ydl_opts["format"] = "bestaudio"
+        "quiet": False,
 
-            ydl_opts["postprocessors"] = [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ]
+        "no_warnings": False,
 
-        else:
+    }
 
-            # Prioriza H.264 + AAC (QuickTime)
-            # Caso não exista, usa o melhor formato disponível.
+    if opcao == "4":
 
-            ydl_opts["format"] = (
-                "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/"
-                "b[vcodec^=avc1]/"
-                "bv*+ba/b"
-            )
+        ydl_opts["postprocessors"] = [
 
-        with YoutubeDL(ydl_opts) as ydl:
+            {
 
-            ydl.download([url])
+                "key": "FFmpegExtractAudio",
 
-        print("\nArquivo salvo em:")
-        print(self.output)
+                "preferredcodec": "mp3",
+
+                "preferredquality": "192",
+
+            }
+
+        ]
+
+    print()
+
+    print("Iniciando download...\n")
+
+    inicio = time.time()
+
+    with YoutubeDL(ydl_opts) as ydl:
+
+        ydl.download([url])
+
+    fim = time.time()
+
+    print()
+
+    print("=" * 60)
+
+    print("Download concluído!")
+
+    print()
+
+    print("Arquivo salvo em:")
+
+    print(pasta)
+
+    print()
+
+    print(
+        "Tempo total:",
+        formatar_tempo(
+            int(fim - inicio)
+        )
+    )
+
+    print("=" * 60)
 
 
-def menu():
+# ---------------------------------------------------------
 
-    print("=" * 50)
-    print("Universal Video Downloader")
-    print("=" * 50)
 
-    url = input("\nURL: ")
+def main():
 
-    nome = input("Nome do arquivo (Enter = automático): ")
+    banner()
 
-    audio = input("Somente áudio? (s/n): ").lower() == "s"
+    verificar_ffmpeg()
 
-    downloader = UniversalDownloader()
+    url = input("\nCole a URL:\n\n> ").strip()
 
-    downloader.download(url, nome, audio)
+    if not url:
+
+        print("\nNenhuma URL informada.")
+
+        return
+
+    print("\nObtendo informações...")
+
+    try:
+
+        info = obter_info(url)
+
+    except Exception:
+
+        print("\nNão foi possível obter informações do vídeo.")
+
+        return
+
+    mostrar_info(info)
+
+    opcao = escolher_formato()
+
+    if opcao == "0":
+
+        print("\nOperação cancelada.")
+
+        return
+
+    pasta = escolher_pasta()
+
+    confirmar = input(
+        "\nIniciar download? (S/n): "
+    ).lower()
+
+    if confirmar == "n":
+
+        print("\nOperação cancelada.")
+
+        return
+
+    baixar(
+
+        url,
+
+        info,
+
+        opcao,
+
+        pasta,
+
+    )
+
+
+# ---------------------------------------------------------
 
 
 if __name__ == "__main__":
 
     try:
 
-        menu()
+        main()
+
+    except KeyboardInterrupt:
+
+        print("\n\nOperação cancelada pelo usuário.")
 
     except Exception as e:
 
         print("\nERRO:")
+
         print(e)
