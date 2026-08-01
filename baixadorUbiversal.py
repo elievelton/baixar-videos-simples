@@ -14,9 +14,19 @@ OUTPUT_PADRAO = os.path.expanduser("~/Movies")
 
 def banner():
 
-    print("=" * 60)
-    print(" Universal Video Downloader v1.1")
-    print("=" * 60)
+    os.system("cls" if os.name == "nt" else "clear")
+
+    print("╔" + "═" * 58 + "╗")
+    print("║" + " " * 58 + "║")
+    print("║" + "UNIVERSAL VIDEO DOWNLOADER".center(58) + "║")
+    print("║" + "versão 1.3.0".center(58) + "║")
+    print("║" + " " * 58 + "║")
+    print("╚" + "═" * 58 + "╝")
+    print()
+    print("  MP4 • MP3 • 1080p • 720p • nome personalizado")
+    print("  Simples, rápido e direto.")
+    print()
+    print("─" * 60)
 
 
 # ---------------------------------------------------------
@@ -178,31 +188,77 @@ def escolher_formato():
 # ---------------------------------------------------------
 
 
+ARQUIVO_ULTIMA_PASTA = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    ".ultima_pasta",
+)
+
+
+def carregar_ultima_pasta():
+
+    try:
+        if os.path.isfile(ARQUIVO_ULTIMA_PASTA):
+            with open(ARQUIVO_ULTIMA_PASTA, "r", encoding="utf-8") as arquivo:
+                pasta = arquivo.read().strip()
+
+            if pasta:
+                return os.path.expanduser(pasta)
+    except OSError:
+        pass
+
+    return OUTPUT_PADRAO
+
+
+def salvar_ultima_pasta(pasta):
+
+    try:
+        with open(ARQUIVO_ULTIMA_PASTA, "w", encoding="utf-8") as arquivo:
+            arquivo.write(pasta)
+    except OSError:
+        # Falhar ao salvar a preferência não deve impedir um download.
+        pass
+
+
+# ---------------------------------------------------------
+
+
 def escolher_pasta():
 
-    print()
+    pasta_padrao = carregar_ultima_pasta()
 
+    print()
     print("Salvar em:")
-
     print()
+    print(pasta_padrao)
 
-    print(OUTPUT_PADRAO)
-
-    alterar = input("\nAlterar pasta? (s/N): ").lower()
+    alterar = input(
+        "\nAlterar pasta? (s/N): "
+    ).strip().lower()
 
     if alterar != "s":
+        pasta = pasta_padrao
+    else:
+        nova_pasta = input(
+            "\nNova pasta (Enter = manter atual): "
+        ).strip()
 
-        os.makedirs(OUTPUT_PADRAO, exist_ok=True)
+        pasta = (
+            os.path.expanduser(nova_pasta)
+            if nova_pasta
+            else pasta_padrao
+        )
 
-        return OUTPUT_PADRAO
+    try:
+        os.makedirs(pasta, exist_ok=True)
+    except OSError as erro:
+        raise Exception(
+            f"Não foi possível acessar ou criar a pasta:\n{pasta}"
+        ) from erro
 
-    pasta = input("\nNova pasta: ").strip()
-
-    pasta = os.path.expanduser(pasta)
-
-    os.makedirs(pasta, exist_ok=True)
+    salvar_ultima_pasta(pasta)
 
     return pasta
+
 
 # ---------------------------------------------------------
 
@@ -284,22 +340,6 @@ def baixar(
 
     titulo = nome_arquivo
 
-    playlist = info.get("_type") == "playlist"
-
-    noplaylist = True
-
-    if playlist:
-
-        print()
-
-        print("Playlist detectada.")
-
-        escolha = input(
-            "Baixar playlist inteira? (s/N): "
-        ).lower()
-
-        noplaylist = escolha != "s"
-
     ydl_opts = {
 
         "outtmpl": os.path.join(
@@ -332,7 +372,7 @@ def baixar(
 
         "ignoreerrors": False,
 
-        "noplaylist": noplaylist,
+        "noplaylist": True,
 
         "quiet": False,
 
@@ -395,68 +435,94 @@ def baixar(
 # ---------------------------------------------------------
 
 
-def main():
+def tela_encerramento():
 
-    banner()
+    print()
+    print("╔" + "═" * 58 + "╗")
+    print("║" + " " * 58 + "║")
+    print("║" + "DOWNLOADS FINALIZADOS".center(58) + "║")
+    print("║" + " " * 58 + "║")
+    print("║" + "Obrigado por usar o Universal Video Downloader!".center(58) + "║")
+    print("║" + "Até a próxima!".center(58) + "║")
+    print("║" + " " * 58 + "║")
+    print("╚" + "═" * 58 + "╝")
+    print()
 
-    verificar_ffmpeg()
+
+# ---------------------------------------------------------
+
+
+def executar_download():
 
     url = input("\nCole a URL:\n\n> ").strip()
 
     if not url:
-
         print("\nNenhuma URL informada.")
-
         return
 
     print("\nObtendo informações...")
 
     try:
-
         info = obter_info(url)
-
     except Exception:
-
         print("\nNão foi possível obter informações do vídeo.")
-
         return
 
     mostrar_info(info)
+
     nome_arquivo = escolher_nome_arquivo(info)
 
     opcao = escolher_formato()
 
     if opcao == "0":
-
         print("\nOperação cancelada.")
-
         return
 
     pasta = escolher_pasta()
 
     confirmar = input(
         "\nIniciar download? (S/n): "
-    ).lower()
+    ).strip().lower()
 
     if confirmar == "n":
-
         print("\nOperação cancelada.")
-
         return
 
     baixar(
+        url,
+        info,
+        opcao,
+        pasta,
+        nome_arquivo,
+    )
 
-    url,
 
-    info,
+# ---------------------------------------------------------
 
-    opcao,
 
-    pasta,
+def main():
 
-    nome_arquivo,
+    banner()
+    verificar_ffmpeg()
 
-)
+    while True:
+
+        executar_download()
+
+        print()
+        print("─" * 60)
+
+        novamente = input(
+            "\nDeseja baixar outro vídeo? (S/n): "
+        ).strip().lower()
+
+        if novamente in ("", "s", "sim"):
+            print()
+            print("─" * 60)
+            continue
+
+        tela_encerramento()
+        break
 
 
 # ---------------------------------------------------------
